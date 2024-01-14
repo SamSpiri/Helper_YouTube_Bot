@@ -1,2 +1,2 @@
-aiogram==2.23.1
-pytube==12.1.0
+aiogram==3.3.0
+pytube==15.0.0
