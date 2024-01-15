@@ -88,10 +88,6 @@ async def set_title(message: Message, state: FSMContext) -> None:
                               resize_keyboard=True)
                           )
 
-@form_router.message(Form.url, F.text.startswith('https://www.youtube.com/'))
-async def command_url(message: Message, state: FSMContext) -> None:
-    url = message.text
-
 @form_router.message(Form.menu, F.text.casefold().startswith("download"))
 async def button_download(message: Message, state: FSMContext) -> None:
     data = await state.get_data()
