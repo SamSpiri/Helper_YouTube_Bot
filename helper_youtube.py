@@ -45,18 +45,24 @@ async def command_help(message: Message, state: FSMContext) -> None:
 async def command_url(message: Message, state: FSMContext) -> None:
     url = message.text
     yt = YouTube(url)
+    streams = yt.streams.filter(progressive=True, file_extension="mp4")
+    keys = [[],[],[]]
+    keys[0].append(KeyboardButton(text="Set Custom Title"))
+    for stream in streams:
+          keys[1].append(KeyboardButton(text=f"Download {stream.resolution} itag {stream.itag}"))
+          keys[2].append(KeyboardButton(text=f"Get Size {stream.resolution} itag {stream.itag}"))
     await state.update_data(
         url = url,
         title = yt.title,
         yttitle = yt.title,
         author = yt.author,
         channel = yt.channel_url,
-        resolution = yt.streams.get_highest_resolution().resolution,
-        file_size = yt.streams.get_highest_resolution().filesize,
+        streams = streams,
         length = yt.length,
         date_published = yt.publish_date.strftime("%Y-%m-%d"),
         views = yt.views,
-        picture = yt.thumbnail_url
+        picture = yt.thumbnail_url,
+        keys = keys
     )
     await state.set_state(Form.menu)
     await show_status(message, await state.get_data())
@@ -75,32 +81,62 @@ async def button_set_title(message: Message, state: FSMContext) -> None:
 async def set_title(message: Message, state: FSMContext) -> None:
     await state.update_data(title=message.text)
     await state.set_state(Form.menu)
-    await show_status(message, await state.get_data())
+    await message.answer(
+                          'Title set to <b>{}</b>'.format(message.text),
+                          reply_markup=ReplyKeyboardMarkup(
+                              keyboard=data.get('keys'),
+                              resize_keyboard=True)
+                          )
 
 @form_router.message(Form.url, F.text.startswith('https://www.youtube.com/'))
 async def command_url(message: Message, state: FSMContext) -> None:
     url = message.text
 
-@form_router.message(Form.menu, F.text.casefold() == "download")
+@form_router.message(Form.menu, F.text.casefold().startswith("download"))
 async def button_download(message: Message, state: FSMContext) -> None:
     data = await state.get_data()
     url = data.get('url')
     title = data.get('title')
     yttitle = data.get('yttitle')
+    itag = message.text.split(' ')[-1]
     yt = YouTube(url)
-    stream = yt.streams.filter(progressive=True, file_extension="mp4")
-    stream.get_highest_resolution().download(f'{message.chat.id}', f'{message.chat.id}_{yt.video_id}.mp4')
-    await message.answer_video(
-        video=FSInputFile(f"{message.chat.id}/{message.chat.id}_{yt.video_id}.mp4"),
-        caption=f"\n\n<b>{title}</b>\n<a href='{url}'>YT link</a>", 
+    stream = yt.streams.get_by_itag(itag)
+    size = round(stream.filesize * 0.000001, 2)
+    if size >= 50:
+      await message.answer(
+          (f"<b>🗂 Video size —</b> <code>{size}MB</code> \n"
+          f"Should be less than <b>50MB</b> to upload via bot. \n"
+          f"Please choose a smaller variant. \n"),
+          parse_mode='HTML',
+      )
+    else:
+      stream.download(f'{message.chat.id}', f'{message.chat.id}_{yt.video_id}.mp4')
+      await message.answer_video(
+          video=FSInputFile(f"{message.chat.id}/{message.chat.id}_{yt.video_id}.mp4"),
+          caption=f"\n\n<b>{title}</b>\n<a href='{url}'>YT link</a>",
+          parse_mode='HTML',
+          reply_markup=ReplyKeyboardRemove()
+      )
+      os.remove(f"{message.chat.id}/{message.chat.id}_{yt.video_id}.mp4")
+      try:
+          os.rmdir(f"{message.chat.id}")
+      except OSError as e:
+          print("Error: %s : %s" % (message.chat.id, e.strerror))
+
+@form_router.message(Form.menu, F.text.casefold().startswith("get size"))
+async def button_get_size(message: Message, state: FSMContext) -> None:
+    data = await state.get_data()
+    url = data.get('url')
+    title = data.get('title')
+    yttitle = data.get('yttitle')
+    itag = message.text.split(' ')[-1]
+    yt = YouTube(url)
+    stream = yt.streams.get_by_itag(itag)
+    size = round(stream.filesize * 0.000001, 2)
+    await message.answer(
+        f"<b>🗂 Video size —</b> <code>{size}MB</code> \n",
         parse_mode='HTML',
-        reply_markup=ReplyKeyboardRemove()
     )
-    os.remove(f"{message.chat.id}/{message.chat.id}_{yt.video_id}.mp4")
-    try:
-        os.rmdir(f"{message.chat.id}")
-    except OSError as e:
-        print("Error: %s : %s" % (message.chat.id, e.strerror))
 
 async def show_status(message: Message, data: Dict[str, Any]) -> None:
     url = data.get('url')
@@ -114,21 +150,19 @@ async def show_status(message: Message, data: Dict[str, Any]) -> None:
     date_published = data.get('date_published')
     views = data.get('views')
     picture = data.get('picture')
+    msg = (f"📹 <b>{title}</b> <a href='{url}'>→</a> \n"
+          f"👤 <b>{author}</b> <a href='{channel}'>→</a> \n"
+          f"⏳ <b>Duration —</b> <code>{str(datetime.timedelta(seconds=length))}</code> \n"
+          f"🗓 <b>Published on —</b> <code>{date_published}</code> \n"
+          f"👁 <b>Views —</b> <code>{views:,}</code> \n")
+    for stream in data.get('streams'):
+          msg += f"⚙️ <b>Resolution —</b> <code>{stream.resolution}</code> \n"
     await message.answer_photo(
-        f'{picture}', caption=f"📹 <b>{title}</b> <a href='{url}'>→</a> \n" #Title#
-        f"👤 <b>{author}</b> <a href='{channel}'>→</a> \n" #Author Of Channel# 
-        f"⚙️ <b>Resolution —</b> <code>{resolution}</code> \n" ##
-        f"🗂 <b>Video size —</b> <code>{round(file_size * 0.000001, 2)}MB</code> \n" #File Size#
-        f"⏳ <b>Duration —</b> <code>{str(datetime.timedelta(seconds=length))}</code> \n" #Length#
-        f"🗓 <b>Published on —</b> <code>{date_published}</code> \n" #Date Published#
-        f"👁 <b>Views —</b> <code>{views:,}</code> \n", parse_mode='HTML',
+        f'{picture}',
+        caption=msg,
+        parse_mode='HTML',
         reply_markup=ReplyKeyboardMarkup(
-            keyboard=[
-                [
-                    KeyboardButton(text="Download"),
-                    KeyboardButton(text="Set Custom Title"),
-                ]
-            ],
+            keyboard=data.get('keys'),
             resize_keyboard=True,
         ),
     )
