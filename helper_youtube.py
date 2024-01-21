@@ -42,6 +42,7 @@ async def command_help(message: Message, state: FSMContext) -> None:
 @form_router.message(F.text.startswith('https://youtube.be/'))
 @form_router.message(F.text.startswith('https://youtu.be/'))
 @form_router.message(F.text.startswith('https://www.youtube.com/'))
+@form_router.message(F.text.startswith('https://youtube.com/'))
 @form_router.message(F.text.startswith('https://m.youtube.com/'))
 async def command_url(message: Message, state: FSMContext) -> None:
     url = message.text
