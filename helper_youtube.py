@@ -83,6 +83,7 @@ async def button_set_title(message: Message, state: FSMContext) -> None:
 async def set_title(message: Message, state: FSMContext) -> None:
     await state.update_data(title=message.text)
     await state.set_state(Form.menu)
+    data = await state.get_data()
     await message.answer(
                           'Title set to <b>{}</b>'.format(message.text),
                           reply_markup=ReplyKeyboardMarkup(
